@@ -29,21 +29,75 @@ import re
     Basic usage:
 '''
 
-class PGNParser(object):
-
-    TAG_PATTERN = re.compile("^\[([A-Za-z]+) \"(.*)\"\]$")
-    PLY_PATTERN = re.compile('^(\d+\.) ([KQRNBOa-hx0-8\+\-\?!# ]+)$')
+class ParseGames(object):
+    '''
+        This class parses PGN file that contains many games.
+    '''
 
 
     def __init__(self, file_name):
         '''
             Init the class attributes
         '''
+        self.file_name = file_name
+        self.raw_games = self._split_games() # Get the games as an array of PGN texts
+        self.games = [ParseGame(game_pgn_text) for game_pgn_text in self.raw_games]
+
+
+    def _split_games(self):
+        '''
+            Given a PGN file, split games into array of PGN lines
+        '''
+        with open(self.file_name) as f:
+            pgn_content = f.readlines()
+
+        is_tag, is_move = False, False
+        games, game = [], ''
+
+        for pgn_line in pgn_content:
+
+            # If we are in a tag game line, and we already passed through tags and moves
+            # then this means it's a new game. Append the previous game in the games array
+            # and reset variables for the new game.
+            if pgn_line[0] == '[' and is_tag and is_move:
+                games.append(game)
+                is_tag, is_move = False, False
+                game = ''
+
+            # Change is_tag and is_move when necessary
+            if pgn_line[0] == '[':
+                is_tag = True
+            elif pgn_line[0] == '1':
+                is_move = True
+
+            game = game + pgn_line
+
+        # The last game doesn't have a tag after the moves
+        games.append(game)
+        return games
+
+
+
+
+class ParseGame(object):
+    '''
+        This class parses a single PGN game, given the PGN text.
+    '''
+
+    TAG_PATTERN = re.compile("^\[([A-Za-z]+) \"(.*)\"\]$")
+    PLY_PATTERN = re.compile('^(\d+\.) ([KQRNBOa-hx0-8\+\-\?!# ]+)$')
+
+
+    def __init__(self, pgn_text_game):
+        '''
+            Init the class attributes
+        '''
+        self.pgn_text_game = pgn_text_game
         self.tags = {}
         self.raw_moves = ''
         self.plies = []
 
-        self.pgn_array = parse_pgn(file_name)
+        self.pgn_array = filter(None, pgn_text_game.split("\n"))
         self._parse_game()
 
 
@@ -82,7 +136,7 @@ class PGNParser(object):
 
     def ply(self, ply_number, player = False):
         '''
-            Get a specific ply moves
+            Get a specific ply moves (white move and black move of a ply)
         '''
 
         if ply_number > len(self.plies):
@@ -106,16 +160,3 @@ class PGNParser(object):
             List game tags keys
         '''
         return list(self.tags.keys())
-
-
-
-def parse_pgn(file_name):
-    '''
-        Read and parse the PGN file and return each line in an array
-    '''
-
-    # Get the content of the PGN file
-    pgn_text = open(file_name).read()
-
-    # Split lines and remove empty elements
-    return filter(None, pgn_text.split("\n"))
